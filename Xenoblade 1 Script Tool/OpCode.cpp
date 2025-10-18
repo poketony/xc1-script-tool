@@ -224,17 +224,17 @@ OpCode::OpCode(std::string opcodeString)
     if (this->opcodeVal == -1) throw std::runtime_error(opcodeString + " is not a valid opcode");
 }
 
-unsigned int OpCode::getOperandSize()
+unsigned int OpCode::getOperandSize() const
 {
     return OperandSizes[this->opcodeVal];
 }
 
-std::string OpCode::getOpCodeString()
+std::string OpCode::getOpCodeString() const
 {
     return OpCodeStrings[this->opcodeVal];
 }
 
-int OpCode::getOpCodeVal()
+int OpCode::getOpCodeVal() const
 {
     return this->opcodeVal;
 }
