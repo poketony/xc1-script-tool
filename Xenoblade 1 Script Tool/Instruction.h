@@ -19,6 +19,8 @@ public:
 
     std::vector<unsigned char> getRawInstruction();
 
+    bool operator==(const Instruction& other) const;
+
     private:
         OpCode opCode;
         int operand;

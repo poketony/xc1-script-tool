@@ -114,9 +114,9 @@ public:
 
     static int stringToOpCode(std::string str);
 
-	unsigned int getOperandSize();
-	std::string getOpCodeString();
-	int getOpCodeVal();
+    unsigned int getOperandSize() const;
+    std::string getOpCodeString() const;
+    int getOpCodeVal() const;
 
     static unsigned int getOperandSize(OpCode::OpCodes oc);
     static unsigned int getOperandSize(std::string str);
