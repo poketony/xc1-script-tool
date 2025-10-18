@@ -24,12 +24,14 @@ public:
 	void setStart(int start);
 	void setEnd(int end);
 
-	std::vector<Instruction> getCode();
-	std::vector<unsigned char> getRawCode();
+        std::vector<Instruction> getCode();
+        std::vector<unsigned char> getRawCode();
 
-	std::string getName();
-	unsigned int getArgs(), getField4(), getField6(), getLocalPoolIndex(), getField10(), getStart(), getEnd();
-	void setLocalPoolIndex(unsigned int index);
-	std::vector<Object> getLocalPool();
+        std::string getName();
+        unsigned int getArgs(), getField4(), getField6(), getLocalPoolIndex(), getField10(), getStart(), getEnd();
+        void setLocalPoolIndex(unsigned int index);
+        std::vector<Object> getLocalPool();
+
+        bool operator==(const Function& other) const;
 };
 

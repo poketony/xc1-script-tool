@@ -5,6 +5,8 @@
 #include <vector>
 #include <map>
 #include <regex>
+#include <algorithm>
+#include <utility>
 #include "Function.h"
 #include "Object.h"
 
@@ -151,22 +153,61 @@ void Script::initScript(std::string fileName) {
 	unsigned int systemAttributePoolOffset = getUInteger4(memblock, 52);
 	//std::cout << std::hex << "System Attribute Pool Offset: 0x" << systemAttributePoolOffset << '\n';
 
-	unsigned int userAttributePoolOffset = getUInteger4(memblock, 56);
-	//std::cout << std::hex << "User Attribute Pool Offset: 0x" << userAttributePoolOffset << '\n';
+        unsigned int userAttributePoolOffset = getUInteger4(memblock, 56);
+        //std::cout << std::hex << "User Attribute Pool Offset: 0x" << userAttributePoolOffset << '\n';
 
-	initIDPool(memblock, IDPoolOffset, intPoolOffset);
-	initIntPool(memblock, intPoolOffset);
-	initFixedPool(memblock, fixedPoolOffset);
-	initStringPool(memblock, stringPoolOffset, functionPoolOffset);
+        unsigned int debugSymbolsOffset = getUInteger4(memblock, 60);
+
+        this->originalSections.clear();
+        this->originalFileSize = size;
+        const unsigned int alignmentCandidates[] = { 0x1000, 0x800, 0x400, 0x200, 0x100, 0x80, 0x40, 0x20, 0x10 };
+        this->originalAlignment = 16;
+        for (unsigned int candidate : alignmentCandidates) {
+                if (candidate != 0 && (size % candidate) == 0) {
+                        this->originalAlignment = std::max(this->originalAlignment, candidate);
+                        break;
+                }
+        }
+
+        std::vector<unsigned int> sectionOffsets = { codeOffset, IDPoolOffset, intPoolOffset, fixedPoolOffset, stringPoolOffset,
+                functionPoolOffset, pluginImportsOffset, OCImportsOffset, functionImportsOffset, staticVariablesOffset, localPoolOffset,
+                systemAttributePoolOffset, userAttributePoolOffset };
+        Script::SectionType sectionOrder[] = { SectionType::Code, SectionType::IDPool, SectionType::IntPool, SectionType::FixedPool,
+                SectionType::StringPool, SectionType::FunctionPool, SectionType::PluginImports, SectionType::OCImports,
+                SectionType::FunctionImports, SectionType::StaticVariables, SectionType::LocalPool, SectionType::SystemAttributes,
+                SectionType::UserAttributes };
+
+        unsigned int lastSectionEnd = debugSymbolsOffset != 0 ? debugSymbolsOffset : size;
+        for (std::size_t i = 0; i < sectionOffsets.size(); i++) {
+                unsigned int start = sectionOffsets[i];
+                unsigned int end = (i + 1 < sectionOffsets.size()) ? sectionOffsets[i + 1] : lastSectionEnd;
+                if (end > size) end = size;
+                SectionData data{ start, {} };
+                data.data.assign(memblock + start, memblock + end);
+                this->originalSections[sectionOrder[i]] = std::move(data);
+        }
+
+        if (lastSectionEnd <= (unsigned int)size) {
+                SectionData debugData{ lastSectionEnd, {} };
+                debugData.data.assign(memblock + lastSectionEnd, memblock + size);
+                this->originalSections[SectionType::Debug] = std::move(debugData);
+        }
+
+        initIDPool(memblock, IDPoolOffset, intPoolOffset);
+        initIntPool(memblock, intPoolOffset);
+        initFixedPool(memblock, fixedPoolOffset);
+        initStringPool(memblock, stringPoolOffset, functionPoolOffset);
 	initLocalPool(memblock, localPoolOffset);
 	initFunctionPool(memblock, functionPoolOffset);
 	initPluginImports(memblock, pluginImportsOffset);
 	initOCImports(memblock, OCImportsOffset);
 	initFunctionImports(memblock, functionImportsOffset);
-	initStaticVariables(memblock, staticVariablesOffset);
-	initSystemAttributePool(memblock, systemAttributePoolOffset);
-	initUserAttributePool(memblock, userAttributePoolOffset);
-	initCode(memblock, codeOffset);
+        initStaticVariables(memblock, staticVariablesOffset);
+        initSystemAttributePool(memblock, systemAttributePoolOffset);
+        initUserAttributePool(memblock, userAttributePoolOffset);
+        initCode(memblock, codeOffset);
+
+        delete[] memblock;
 }
 
 std::vector<std::string> split(std::string str, std::string delim = ",") {
@@ -1022,97 +1063,125 @@ void addHeaderOffset(std::vector<unsigned char>& script, int& currOffset, std::v
 	currOffset += section.size();
 }
 
-void Script::generateScriptFile(std::string name) {
-	// Make new script file name.sb
-	std::ofstream script(name + ".sb", std::ios::trunc | std::ios::binary);
+void Script::generateScriptFile(std::string name, const Script* original) {
+        std::ofstream script(name + ".sb", std::ios::trunc | std::ios::binary);
 
-	// Generate script file data from the data in the vector arrays
-	// Code section
-	std::vector<unsigned char> codeSection = this->generateCodeSection();
+        std::vector<unsigned char> codeSection = this->generateCodeSection();
+        std::vector<unsigned char> IDPoolSection = this->generateStringSection(this->IDPool);
+        std::vector<unsigned char> intPoolSection = this->generateIntPoolSection();
+        std::vector<unsigned char> fixedPoolSection = this->generateFixedPoolSection();
+        std::vector<unsigned char> stringPoolSection = this->generateStringSection(this->stringPool);
+        std::vector<unsigned char> localPoolSection = this->generateLocalPoolSection();
+        std::vector<unsigned char> functionPoolSection = this->generateFunctionPoolSection();
+        std::vector<unsigned char> pluginImportsSection = this->generatePluginImportsSection();
+        std::vector<unsigned char> OCImportsSection = this->generateOCImportsSection();
+        std::vector<unsigned char> functionImportsSection = this->generateFunctionImportsSection();
+        std::vector<unsigned char> staticVarsSection = this->generateStaticVariablesSection();
+        std::vector<unsigned char> systemAttributesSection = this->generateSystemAttributesSection();
+        std::vector<unsigned char> userAttributesSection = this->generateUserAttributesSection();
 
-	// ID Pool section
-	std::vector<unsigned char> IDPoolSection = this->generateStringSection(this->IDPool);
+        struct SectionOutput {
+                SectionType type;
+                std::vector<unsigned char> data;
+        };
 
-	// Int Pool section
-	std::vector<unsigned char> intPoolSection = this->generateIntPoolSection();
+        std::vector<SectionOutput> sections;
+        sections.reserve(13);
 
-	// Fixed Pool section
-	std::vector<unsigned char> fixedPoolSection = this->generateFixedPoolSection();
+        auto canReuseSection = [&](SectionType type, bool unchanged) -> bool {
+                if (original == nullptr || !unchanged) return false;
+                return original->originalSections.find(type) != original->originalSections.end();
+        };
 
-	// String Pool section
-	std::vector<unsigned char> stringPoolSection = this->generateStringSection(this->stringPool);
+        auto selectSection = [&](SectionType type, const std::vector<unsigned char>& generated, bool unchanged) {
+                SectionOutput output{ type, generated };
+                if (canReuseSection(type, unchanged)) {
+                        output.data = original->originalSections.at(type).data;
+                }
+                sections.push_back(std::move(output));
+        };
 
-	// Local Pool section
-	std::vector<unsigned char> localPoolSection = this->generateLocalPoolSection();
+        bool functionsUnchanged = original != nullptr && this->functionPool == original->functionPool;
+        bool localPoolUnchanged = original != nullptr && this->localPool == original->localPool;
+        bool IDPoolUnchanged = original != nullptr && this->IDPool == original->IDPool;
+        bool intPoolUnchanged = original != nullptr && this->intPool == original->intPool;
+        bool fixedPoolUnchanged = original != nullptr && this->fixedPool == original->fixedPool;
+        bool stringPoolUnchanged = original != nullptr && this->stringPool == original->stringPool;
+        bool pluginImportsUnchanged = original != nullptr && this->pluginImports == original->pluginImports;
+        bool OCImportsUnchanged = original != nullptr && this->OCImports == original->OCImports;
+        bool staticVarsUnchanged = original != nullptr && this->staticVariables == original->staticVariables;
+        bool systemAttributesUnchanged = original != nullptr && this->systemAttributePool == original->systemAttributePool;
+        bool userAttributesUnchanged = original != nullptr && this->userAttributePool == original->userAttributePool;
 
-	// Function Pool section
-	std::vector<unsigned char> functionPoolSection = this->generateFunctionPoolSection();
+        bool reuseCodeSection = functionsUnchanged && intPoolUnchanged && fixedPoolUnchanged && IDPoolUnchanged;
+        bool reuseFunctionPoolSection = functionsUnchanged && localPoolUnchanged && IDPoolUnchanged;
+        bool reuseLocalPoolSection = localPoolUnchanged;
+        bool reusePluginImportsSection = pluginImportsUnchanged && IDPoolUnchanged;
+        bool reuseOCImportsSection = OCImportsUnchanged && IDPoolUnchanged;
+        bool reuseSystemAttributesSection = systemAttributesUnchanged && IDPoolUnchanged;
+        bool reuseUserAttributesSection = userAttributesUnchanged && IDPoolUnchanged;
 
-	// Plugin Imports section
-	std::vector<unsigned char> pluginImportsSection = this->generatePluginImportsSection();
+        selectSection(SectionType::Code, codeSection, reuseCodeSection);
+        selectSection(SectionType::IDPool, IDPoolSection, IDPoolUnchanged);
+        selectSection(SectionType::IntPool, intPoolSection, intPoolUnchanged);
+        selectSection(SectionType::FixedPool, fixedPoolSection, fixedPoolUnchanged);
+        selectSection(SectionType::StringPool, stringPoolSection, stringPoolUnchanged);
+        selectSection(SectionType::FunctionPool, functionPoolSection, reuseFunctionPoolSection);
+        selectSection(SectionType::PluginImports, pluginImportsSection, reusePluginImportsSection);
+        selectSection(SectionType::OCImports, OCImportsSection, reuseOCImportsSection);
 
-	// OC Imports section
-	std::vector<unsigned char> OCImportsSection = this->generateOCImportsSection();
+        bool reuseFunctionImportsSection = original != nullptr && original->originalSections.find(SectionType::FunctionImports) != original->originalSections.end();
+        selectSection(SectionType::FunctionImports, functionImportsSection, reuseFunctionImportsSection);
 
-	// Function Imports section
-	std::vector<unsigned char> functionImportsSection = this->generateFunctionImportsSection();
+        selectSection(SectionType::StaticVariables, staticVarsSection, staticVarsUnchanged);
+        selectSection(SectionType::LocalPool, localPoolSection, reuseLocalPoolSection);
+        selectSection(SectionType::SystemAttributes, systemAttributesSection, reuseSystemAttributesSection);
+        selectSection(SectionType::UserAttributes, userAttributesSection, reuseUserAttributesSection);
 
-	// Static Variables section
-	std::vector<unsigned char> staticVarsSection = this->generateStaticVariablesSection();
+        std::vector<unsigned char> debugSection;
+        if (original != nullptr) {
+                auto it = original->originalSections.find(SectionType::Debug);
+                if (it != original->originalSections.end()) debugSection = it->second.data;
+        }
 
-	// System Attributes Pool section
-	std::vector<unsigned char> systemAttributesSection = this->generateSystemAttributesSection();
+        std::vector<unsigned char> header;
+        header.insert(header.end(), {0x53, 0x42, 0x20, 0x20});
+        header.insert(header.end(), {this->version, 0});
+        header.push_back(this->flags);
+        header.push_back(this->isLoaded);
 
-	// User Attribute Pool section
-	std::vector<unsigned char> userAttributesSection = this->generateUserAttributesSection();
+        int currOffset = 0x40;
+        for (SectionOutput& section : sections) addHeaderOffset(header, currOffset, section.data);
+        if (debugSection.size() != 0) {
+                addValueToVector(header, 4, currOffset);
+                currOffset += debugSection.size();
+        }
+        else {
+                addValueToVector(header, 4, 0);
+        }
 
-	// Create header and append all sections
-	std::vector<unsigned char> header;
-	header.insert(header.end(), {0x53, 0x42, 0x20, 0x20}); // file magic
-	header.insert(header.end(), {this->version, 0});
-	header.push_back(this->flags);
-	header.push_back(this->isLoaded);
+        script.write((char*)header.data(), header.size());
+        for (SectionOutput& section : sections) script.write((char*)section.data.data(), section.data.size());
+        if (debugSection.size() != 0) script.write((char*)debugSection.data(), debugSection.size());
 
-	int currOffset = 0x40; // size of header
-	addHeaderOffset(header, currOffset, codeSection);
-	addHeaderOffset(header, currOffset, IDPoolSection);
-	addHeaderOffset(header, currOffset, intPoolSection);
-	addHeaderOffset(header, currOffset, fixedPoolSection);
-	addHeaderOffset(header, currOffset, stringPoolSection);
-	addHeaderOffset(header, currOffset, functionPoolSection);
-	addHeaderOffset(header, currOffset, pluginImportsSection);
-	addHeaderOffset(header, currOffset, OCImportsSection);
-	addHeaderOffset(header, currOffset, functionImportsSection);
-	addHeaderOffset(header, currOffset, staticVarsSection);
-	addHeaderOffset(header, currOffset, localPoolSection);
-	addHeaderOffset(header, currOffset, systemAttributesSection);
-	addHeaderOffset(header, currOffset, userAttributesSection);
-	header.insert(header.end(), { 0, 0, 0, 0 }); // debug symbols offset
+        size_t fileSize = header.size();
+        for (SectionOutput& section : sections) fileSize += section.data.size();
+        fileSize += debugSection.size();
 
-	script.write((char*)header.data(), header.size());
-	script.write((char*)codeSection.data(), codeSection.size());
-	script.write((char*)IDPoolSection.data(), IDPoolSection.size());
-	script.write((char*)intPoolSection.data(), intPoolSection.size());
-	script.write((char*)fixedPoolSection.data(), fixedPoolSection.size());
-	script.write((char*)stringPoolSection.data(), stringPoolSection.size());
-	script.write((char*)functionPoolSection.data(), functionPoolSection.size());
-	script.write((char*)pluginImportsSection.data(), pluginImportsSection.size());
-	script.write((char*)OCImportsSection.data(), OCImportsSection.size());
-	script.write((char*)functionImportsSection.data(), functionImportsSection.size());
-	script.write((char*)staticVarsSection.data(), staticVarsSection.size());
-	script.write((char*)localPoolSection.data(), localPoolSection.size());
-	script.write((char*)systemAttributesSection.data(), systemAttributesSection.size());
-	script.write((char*)userAttributesSection.data(), userAttributesSection.size());
+        unsigned int alignment = 16;
+        if (original != nullptr) alignment = std::max(16u, original->originalAlignment);
+        size_t padding = 0;
+        if (alignment == 16) {
+                padding = (alignment - (fileSize % alignment)) % alignment;
+                if (padding == 0) padding = alignment;
+        }
+        else {
+                size_t remainder = fileSize % alignment;
+                if (remainder != 0) padding = alignment - remainder;
+        }
+        for (size_t i = 0; i < padding; i++) script.put((char)0x0);
 
-	// pad to nearest 16 (the actual script files pad even more)
-	int fileSize = header.size() + codeSection.size() + IDPoolSection.size() + intPoolSection.size() + fixedPoolSection.size() + stringPoolSection.size() + functionPoolSection.size() + pluginImportsSection.size()
-		+ OCImportsSection.size() + functionImportsSection.size() + staticVarsSection.size() + localPoolSection.size() + systemAttributesSection.size() + userAttributesSection.size();
-	
-	for (int i = 0; i < 16 - (fileSize & 0xF); i++) {
-		script << (unsigned char)0x0;
-	}
-	
-	script.close();
+        script.close();
 }
 
 int Script::getIndexInIDPool(std::string ID) {

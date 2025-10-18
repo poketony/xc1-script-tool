@@ -72,5 +72,14 @@ unsigned int Object::getField8()
 
 bool Object::isInArray()
 {
-	return this->inArray;
+        return this->inArray;
+}
+
+bool Object::operator==(const Object& other) const
+{
+        return this->typeEnum == other.typeEnum &&
+                this->inArray == other.inArray &&
+                this->length == other.length &&
+                this->value == other.value &&
+                this->field8 == other.field8;
 }

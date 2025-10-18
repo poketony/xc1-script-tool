@@ -4,25 +4,53 @@
 #include "PluginImport.h"
 #include "Object.h"
 #include "Instruction.h"
+#include <map>
+#include <vector>
 
 class Script
 {
-	unsigned char version, flags, isLoaded;
+        enum class SectionType {
+                Code,
+                IDPool,
+                IntPool,
+                FixedPool,
+                StringPool,
+                FunctionPool,
+                PluginImports,
+                OCImports,
+                FunctionImports,
+                StaticVariables,
+                LocalPool,
+                SystemAttributes,
+                UserAttributes,
+                Debug
+        };
 
-	bool littleEndian, is64Bit;
+        struct SectionData {
+                unsigned int offset;
+                std::vector<unsigned char> data;
+        };
 
-	std::vector<std::string> IDPool, stringPool, OCImports, systemAttributePool, userAttributePool;
-	std::vector<int> intPool;
-	std::vector<float> fixedPool;
-	std::vector<Function> functionPool;
-	std::vector<PluginImport> pluginImports;
-	std::vector<Object> staticVariables;
-	std::vector<std::vector<Object>> localPool;
+        unsigned char version, flags, isLoaded;
 
-	unsigned int getUInteger4(unsigned char* memblock, int start);
-	unsigned int getUInteger2(unsigned char* memblock, int start);
-	unsigned int getInteger2(unsigned char* memblock, int start);
-	unsigned int getInteger4(unsigned char* memblock, int start);
+        bool littleEndian, is64Bit;
+
+        std::vector<std::string> IDPool, stringPool, OCImports, systemAttributePool, userAttributePool;
+        std::vector<int> intPool;
+        std::vector<float> fixedPool;
+        std::vector<Function> functionPool;
+        std::vector<PluginImport> pluginImports;
+        std::vector<Object> staticVariables;
+        std::vector<std::vector<Object>> localPool;
+
+        std::map<SectionType, SectionData> originalSections;
+        unsigned int originalFileSize = 0;
+        unsigned int originalAlignment = 16;
+
+        unsigned int getUInteger4(unsigned char* memblock, int start);
+        unsigned int getUInteger2(unsigned char* memblock, int start);
+        unsigned int getInteger2(unsigned char* memblock, int start);
+        unsigned int getInteger4(unsigned char* memblock, int start);
 	float getFloat(unsigned char* memblock, int start);
 
 	void initCode(unsigned char* memblock, unsigned int codeOffset);
@@ -54,16 +82,16 @@ class Script
 	void encryptBytes(unsigned char* memblock, int start);
 
 public:
-	Script(std::string fileName, bool isScript);
-	void initScript(std::string fileName);
-	void initCSV(std::string fileName);
-	void generateOutfile(std::string name);
-	void generateScriptFile(std::string name);
+        Script(std::string fileName, bool isScript);
+        void initScript(std::string fileName);
+        void initCSV(std::string fileName);
+        void generateOutfile(std::string name);
+        void generateScriptFile(std::string name, const Script* original = nullptr);
 
-	int getIndexInIDPool(std::string ID);
+        int getIndexInIDPool(std::string ID);
 
-	std::vector<unsigned char> generateCodeSection();
-	std::vector<unsigned char> generateIntPoolSection();
+        std::vector<unsigned char> generateCodeSection();
+        std::vector<unsigned char> generateIntPoolSection();
 	std::vector<unsigned char> generateFixedPoolSection();
 	std::vector<unsigned char> generateStringSection(std::vector<std::string> input);
 	std::vector<unsigned char> generateFunctionPoolSection();
