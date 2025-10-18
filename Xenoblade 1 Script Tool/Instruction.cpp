@@ -83,3 +83,13 @@ std::vector<unsigned char> Instruction::getRawInstruction() {
 
     return rawInstruction;
 }
+
+bool Instruction::operator==(const Instruction& other) const
+{
+    if (this->opCode.getOpCodeVal() != other.opCode.getOpCodeVal()) return false;
+    if (this->operand != other.operand) return false;
+    if (this->opCode.getOpCodeVal() == OpCode::OpCodes::SWITCH) {
+        return this->defaultCase == other.defaultCase && this->switchCases == other.switchCases;
+    }
+    return true;
+}
