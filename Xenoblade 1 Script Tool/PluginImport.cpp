@@ -15,5 +15,10 @@ std::string PluginImport::getPluginName()
 
 std::string PluginImport::getFunctionName()
 {
-	return this->functionName;
+        return this->functionName;
+}
+
+bool PluginImport::operator==(const PluginImport& other) const
+{
+        return this->pluginName == other.pluginName && this->functionName == other.functionName;
 }

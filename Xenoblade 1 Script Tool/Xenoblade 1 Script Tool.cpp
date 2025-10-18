@@ -3,11 +3,11 @@
 #include "Script.h"
 #include "Tests.h"
 
-void printUsageStatement(std::string progName) 
+void printUsageStatement(std::string progName)
 {
     std::cout << "Usage:\n" <<
         "Generate Output File: " << progName << " decompile <input_script> <output_csv>\n" <<
-        "Generate Script File: " << progName << " compile <input_csv> <output_script>\n";
+        "Generate Script File: " << progName << " compile <input_csv> <output_script> [original_script]\n";
 }
 
 int main(int argc, char *argv[])
@@ -16,7 +16,7 @@ int main(int argc, char *argv[])
        Generate Script File: <prog_name> compile <input_csv> <output_script>
     */
     try {
-        if (argc != 4) printUsageStatement(argv[0]);
+        if (argc < 4 || argc > 5) printUsageStatement(argv[0]);
         else {
             if (strcmp(argv[1], "decompile") == 0) {
                 Script script(argv[2], true);
@@ -25,7 +25,13 @@ int main(int argc, char *argv[])
             }
             else if (strcmp(argv[1], "compile") == 0) {
                 Script script(argv[2], false);
-                script.generateScriptFile(argv[3]);
+                if (argc == 5) {
+                    Script original(argv[4], true);
+                    script.generateScriptFile(argv[3], &original);
+                }
+                else {
+                    script.generateScriptFile(argv[3]);
+                }
                 std::cout << "Compiled " << argv[2] << " to " << argv[3] << ".sb";
             }
             else if (strcmp(argv[1], "test") == 0) {

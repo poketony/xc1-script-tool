@@ -7,8 +7,10 @@ class PluginImport
 	std::string functionName;
 
 public:
-	PluginImport(std::string pluginName, std::string functionName);
+        PluginImport(std::string pluginName, std::string functionName);
 
-	std::string getPluginName(), getFunctionName();
+        std::string getPluginName(), getFunctionName();
+
+        bool operator==(const PluginImport& other) const;
 };
 

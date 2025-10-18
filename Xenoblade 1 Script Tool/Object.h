@@ -4,9 +4,9 @@
 class Object
 {
 public:
-	enum Type {
-		Null, True, False, Int, Fixed, String, Array, Function, Plugin, OC, Sys
-	};
+        enum Type {
+                Null, True, False, Int, Fixed, String, Array, Function, Plugin, OC, Sys
+        };
 
 private:
 	std::string type;
@@ -18,12 +18,14 @@ private:
 
 public:
 	Object(Type typeEnum, bool inArray, unsigned int length, int value, unsigned int field8);
-	Object(std::string type, bool inArray, unsigned int length, int value, unsigned int field8);
+        Object(std::string type, bool inArray, unsigned int length, int value, unsigned int field8);
 
-	std::string getType();
-	Type getTypeEnum();
-	unsigned int getLength(), getField8();
-	int getValue();
-	bool isInArray();
+        std::string getType();
+        Type getTypeEnum();
+        unsigned int getLength(), getField8();
+        int getValue();
+        bool isInArray();
+
+        bool operator==(const Object& other) const;
 };
 

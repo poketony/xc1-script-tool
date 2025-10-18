@@ -92,5 +92,16 @@ unsigned int Function::getStart()
 
 unsigned int Function::getEnd()
 {
-	return this->end;
+        return this->end;
+}
+
+bool Function::operator==(const Function& other) const
+{
+        return this->name == other.name &&
+                this->args == other.args &&
+                this->field4 == other.field4 &&
+                this->field6 == other.field6 &&
+                this->field10 == other.field10 &&
+                this->localPool == other.localPool &&
+                this->code == other.code;
 }
